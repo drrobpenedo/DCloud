@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DCloud Theory — React Simulation</title>
+
+  <!-- Dark/space styling -->
+  <style>
+    :root{
+      --bg:#0b0f1a; --panel:#0f1526; --border:#1d2750; --text:#eaf2ff;
+      --muted:#9db2c6; --a:#25f6ff; --b:#7affd8; --good:#16c784; --bad:#ff5757;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:radial-gradient(1200px 600px at 70% -10%, #132, transparent),var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+    header{padding:20px 20px 8px}
+    h1{margin:0;font-size:clamp(22px,2.6vw,34px);font-weight:800;letter-spacing:.2px;
+      background:linear-gradient(90deg,var(--a),var(--b));-webkit-background-clip:text;background-clip:text;color:transparent}
+    .lead{color:var(--muted);margin:.35rem 0 0}
+    main{padding:16px 20px 28px;display:grid;gap:16px;grid-template-columns:380px 1fr}
+    @media (max-width:980px){main{grid-template-columns:1fr}}
+    .card{background:linear-gradient(180deg,#0f1526,#0b1120);border:1px solid var(--border);border-radius:16px;padding:16px;box-shadow:0 0 0 1px #0b1325 inset, 0 12px 28px rgba(0,0,0,.25)}
+    .controls .row{margin:12px 0}
+    .controls label{display:flex;justify-content:space-between;align-items:center;color:#cfe1ff;font-size:14px;margin-bottom:6px}
+    .chip{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid #244;color:#93d8ff;background:rgba(10,20,40,.55);margin-left:6px}
+    .val{color:var(--a);font-weight:700}
+    input[type=range]{width:100%;accent-color:var(--a)}
+    select{width:100%;padding:8px;border-radius:10px;background:#0a1530;border:1px solid var(--border);color:#dff6ff}
+    .kpi{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px}
+    .tile{background:#0b1428;border:1px solid #1a2b55;border-radius:12px;padding:12px}
+    .tile .t{font-size:12px;color:#9cb0cb}
+    .tile .v{font-size:22px;font-weight:800;margin-top:6px}
+    .eq{margin-top:14px;padding:10px;border-radius:12px;background:#0a1122;border:1px dashed #253058;color:#cfe1ff}
+    .layers{display:grid;gap:12px;margin-top:10px}
+    .layer{border:1px solid var(--border);border-radius:14px;padding:14px;background:linear-gradient(180deg,rgba(37,246,255,.07),transparent 60%)}
+    .layer h3{margin:0 0 6px;font-size:16px}
+    .layer p{margin:0;color:#b7c6de;font-size:13px}
+    .tags .chip{margin-right:6px}
+    .footer{opacity:.85;text-align:center;font-size:12px;padding:10px 0 18px;color:#8ea6c8}
+    button.play{margin-top:10px;padding:8px 12px;border-radius:10px;border:1px solid #1f2b55;background:#0b1736;color:#e8f6ff;font-weight:700;cursor:pointer}
+    button.play[aria-pressed="true"]{outline:2px solid var(--a)}
+    canvas{max-height:320px}
+    a{color:var(--a)}
+  </style>
+
+  <!-- React 18 (UMD) + Babel for in-browser JSX -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- MathJax v3 -->
+  <script>
+    window.MathJax = {tex:{inlineMath:[['$','$'],['\\(','\\)']]}, svg:{fontCache:'global'}};
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.min.js"></script>
+</head>
+
+<body>
+  <header>
+    <h1>DCloud Theory — React Simulation</h1>
+    <p class="lead">Interact with dimension <b>D</b>, hardware <b>H</b>, and overhead <b>E</b> to see
+      how $Q_{\\mathrm{eff}}=\\dfrac{H}{E}\\,f(D)$ scales. Change the model for $f(D)$ and watch cooling flip from “Needed” to “Offloaded”.</p>
+  </header>
+
+  <main>
+    <section class="card controls">
+      <h2 style="margin:0 0 8px;font-size:18px">Parameters</h2>
+      <div class="row">
+        <label>Dimensional Order <span class="chip">D</span> <span class="val" id="Dread">5</span></label>
+        <input id="D" type="range" min="3" max="7" step="1" value="5">
+      </div>
+      <div class="row">
+        <label>Hardware Base Capacity <span class="chip">H</span> <span class="val" id="Hread">1000</span></label>
+        <input id="H" type="range" min="10" max="10000" step="10" value="1000">
+      </div>
+      <div class="row">
+        <label>Error-Correction Overhead <span class="chip">E</span> <span class="val" id="Eread">500</span></label>
+        <input id="E" type="range" min="1" max="5000" step="1" value="500">
+      </div>
+      <div class="row">
+        <label>Amplification model <span class="chip">f(D)</span></label>
+        <select id="model">
+          <option value="exp">exp(D−3) — baseline theory</option>
+          <option value="pow">1.8^(D−3) — conservative</option>
+          <option value="hyp">(D−2)^2 — illustrative</option>
+        </select>
+      </div>
+      <button class="play" id="playBtn" aria-pressed="false">▶ Play demo</button>
+
+      <div class="kpi">
+        <div class="tile"><div class="t">Amplification f(D)</div><div class="v" id="fKpi">7.39×</div></div>
+        <div class="tile"><div class="t">Effective Capacity Q<sub>eff</sub></div><div class="v" id="qKpi">14.78</div></div>
+        <div class="tile"><div class="t">Cryo Requirement</div><div class="v" id="cryoKpi" style="color:var(--good)">Offloaded</div></div>
+      </div>
+
+      <div class="eq" id="equation">Equation: $Q_{\\mathrm{eff}}=\\dfrac{H}{E}\\,f(D)$</div>
+      <p style="color:#8fb0d7;font-size:12px;margin:8px 0 0">Rule of thumb: when $f(D)\\ge e^2\\approx 7.39$, the model flips “Cooling” to <b>Offloaded</b> (i.e., handled by the 5D entropy sink).</p>
+    </section>
+
+    <section class="card">
+      <h2 style="margin:0 0 8px;font-size:18px">Visualization</h2>
+      <canvas id="chart" aria-label="Amplification chart"></canvas>
+
+      <div class="layers">
+        <div class="layer">
+          <h3>3D Interface Layer</h3>
+          <p>Classical APIs & apps. Encoders/Decoders translate 3D information into higher-dimensional codes.</p>
+          <div class="tags"><span class="chip">Users</span><span class="chip">I/O Gateway</span><span class="chip">Policy</span></div>
+        </div>
+        <div class="layer">
+          <h3>4D Orchestration Layer</h3>
+          <p>Temporal routing, checkpointing, retries. Mediates transitions and integrity across dimensions.</p>
+          <div class="tags"><span class="chip">Router</span><span class="chip">Scheduler</span><span class="chip">Audit</span></div>
+        </div>
+        <div class="layer">
+          <h3>5D Quantum Substrate</h3>
+          <p>Storage & compute fabric. <em>Entropy Sink</em> provides passive stability in place of cryogenics.</p>
+          <div class="tags"><span class="chip">5D Cells</span><span class="chip">Persistence Vault</span><span class="chip">Entropy Sink</span></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="footer">© DCloud Theory — React demo. Client-side only; no data collected.</div>
+
+  <!-- React app -->
+  <div id="app-root" style="display:none"></div>
+  <script type="text/babel">
+    const fOfD = (D, model) => {
+      if(model === "exp") return Math.exp(D-3);
+      if(model === "pow") return Math.pow(1.8, D-3);
+      if(model === "hyp") return Math.pow(D-2, 2);
+      return Math.exp(D-3);
+    };
+
+    // Chart setup
+    const ctx = document.getElementById('chart').getContext('2d');
+    const gradient = ctx.createLinearGradient(0,0,600,0);
+    gradient.addColorStop(0,'#25f6ff'); gradient.addColorStop(1,'#7affd8');
+
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [3,4,5,6,7],
+        datasets: [{
+          label: 'f(D)',
+          data: [1, Math.E, Math.E**2, Math.E**3, Math.E**4], // placeholder initial
+          borderColor: gradient,
+          borderWidth: 3,
+          pointBackgroundColor: '#7affd8',
+          pointBorderColor: '#09223f',
+          pointRadius: 4,
+          tension: 0.25
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { title: { display:true, text:'D (3→7)', color:'#89a6cc' }, ticks:{ color:'#9db2c6' }, grid:{ color:'#223255' } },
+          y: { title: { display:true, text:'Amplification f(D)', color:'#89a6cc' }, ticks:{ color:'#9db2c6' }, grid:{ color:'#223255' } }
+        },
+        plugins: {
+          legend: { labels:{ color:'#cfe1ff' } },
+          tooltip: { callbacks: {
+            label: ctx => ` f(D) = ${ctx.parsed.y.toFixed(2)}×`
+          }}
+        }
+      }
+    });
+
+    // DOM elements
+    const D = document.getElementById('D');
+    const H = document.getElementById('H');
+    const E = document.getElementById('E');
+    const model = document.getElementById('model');
+    const Dread = document.getElementById('Dread');
+    const Hread = document.getElementById('Hread');
+    const Eread = document.getElementById('Eread');
+    const fKpi = document.getElementById('fKpi');
+    const qKpi = document.getElementById('qKpi');
+    const cryoKpi = document.getElementById('cryoKpi');
+    const playBtn = document.getElementById('playBtn');
+
+    function updateAll(){
+      // Read values
+      const d = +D.value, h = +H.value, e = +E.value, m = model.value;
+      Dread.textContent = d; Hread.textContent = h; Eread.textContent = e;
+
+      // KPIs
+      const f = fOfD(d, m);
+      const Qeff = (h/Math.max(e,1))*f;
+      fKpi.textContent = f.toFixed(2) + '×';
+      qKpi.textContent = Qeff.toFixed(2);
+      const cryoOff = f >= Math.E**2; // threshold ~7.39
+      cryoKpi.textContent = cryoOff ? 'Offloaded' : 'Needed';
+      cryoKpi.style.color = cryoOff ? 'var(--good)' : 'var(--bad)';
+
+      // Chart series for D=3..7
+      chart.data.datasets[0].data = [3,4,5,6,7].map(dd => fOfD(dd,m));
+      chart.update('none');
+
+      // Make sure MathJax typesets if needed
+      if(window.MathJax && window.MathJax.typesetPromise){ window.MathJax.typesetPromise(); }
+    }
+
+    // Listeners
+    [D,H,E,model].forEach(el => el.addEventListener('input', updateAll));
+
+    // Auto-play
+    let playing = false, timer;
+    function step(){
+      if(!playing) return;
+      const d = +D.value;
+      let dir = +(D.dataset.dir || 1);
+      let next = d + dir;
+      if(next>7){ next=6; dir=-1; } else if(next<3){ next=4; dir=1; }
+      D.dataset.dir = dir; D.value = next;
+
+      // Gentle flicker on H/E to simulate telemetry
+      H.value = Math.max(10, Math.min(10000, +H.value + (Math.random()*80-40)));
+      E.value = Math.max(1, Math.min(5000, +E.value + (Math.random()*12-6)));
+      updateAll();
+      timer = setTimeout(step, 700);
+    }
+
+    playBtn.addEventListener('click', () => {
+      playing = !playing;
+      playBtn.setAttribute('aria-pressed', playing ? 'true' : 'false');
+      playBtn.textContent = playing ? '⏸ Pause demo' : '▶ Play demo';
+      if(playing) step(); else clearTimeout(timer);
+    });
+
+    // Initial render
+    updateAll();
+  </script>
+</body>
+</html>
